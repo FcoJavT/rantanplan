@@ -1,3 +1,123 @@
+import re
+
+"""
+Syllabification
+"""
+accents_re = re.compile("[áéíóú]", re.I | re.U)
+paroxytone_re = re.compile("([aeiou]|n|[aeiou]s)$",
+                           # checks if a str ends in unaccented vowel/N/S
+                           re.I | re.U)
+
+"""
+Regular expressions for spanish syllabification.
+For the 'tl' cluster we have decided to join the two letters
+because is the most common syllabification and the same that
+Perkins (http://sadowsky.cl/perkins.html), DIRAE (https://dirae.es/),
+and Educalingo (https://educalingo.com/es/dic-es) use.
+"""
+letter_clusters_re = re.compile(r"""
+    # 1: weak vowels diphthong with h
+    ([iuü]h[iuü])|
+    # 2: open vowels
+    ([aáeéíoóú]h[iuü])|
+    # 3: closed vowels
+    ([iuü]h[aáeéíoóú])|
+    # 4: liquid and mute consonants (adds hyphen)
+    ([a-záéíóúñ](?:(?:[bcdfghjklmnñpqstvy][hlr])|
+    (?:[bcdfghjklmnñpqrstvy][hr])|
+    (?:[bcdfghjklmnñpqrstvyz][h]))[aáeéiíoóuúü])|
+    # 5: any char followed by liquid and mute consonant,
+    # exceptions for 'r+l' and 't+l'
+    ((?:(?:[bcdfghjklmnñpqstvy][hlr])|
+    (?:[bcdfghjklmnñpqrstvy][hr])|
+    (?:[bcdfghjklmnñpqrstvyz][h]))[aáeéiíoóuúü])|
+    # 6: non-liquid consonant (adds hyphen)
+    ([a-záéíóúñ][bcdfghjklmnñpqrstvxyz][aáeéiíoóuúüï])|
+    # 7: vowel group (adds hyphen)
+    ([aáeéíoóú][aáeéíoóú])|
+    # 8: umlaut 'u' diphthongs
+    (ü[iíaeo])|
+    # 9: Explicit hiatus with umlaut vowels, first part
+    ([aeiou][äëïöü])|
+    #10: Explicit hiatus with umlaut vowels, second part
+    ([üäëïö][a-z])|
+    #11: any char
+    ([a-záéíóúñ])""", re.I | re.U | re.VERBOSE)  # VERBOSE to catch the group
+
+"""
+Rhythmical Analysis
+"""
+SPACE = "SPACE"
+STRONG_VOWELS = set("aeoáéóÁÉÓAEO")
+WEAK_VOWELS = set("iuüíúIÍUÜÚ")
+LIAISON_FIRST_PART = set("aeiouáéíóúAEIOUÁÉÍÓÚyY")
+LIAISON_SECOND_PART = set("aeiouáéíóúAEIOUÁÉÍÓÚhyYH")
+
+STRESSED_UNACCENTED_MONOSYLLABLES = {"yo", "vio", "dio", "fe", "sol", "ti",
+                                     "un"}
+
+UNSTRESSED_UNACCENTED_MONOSYLLABLES = {'de', 'el', 'la', 'las', 'le', 'les',
+                                       'lo', 'los',
+                                       'mas', 'me', 'mi', 'nos', 'os', 'que',
+                                       'se', 'si',
+                                       'su', 'tan', 'te', 'tu', "tus", "oh", "pues"}
+
+UNSTRESSED_FORMS = {"ay", "don", "doña", "aun", "que", "cual", "quien", "donde",
+                    "cuando", "cuanto", "como", "cuantas", "cuantos"}
+
+STRESSED_PRON = {"mío", "mía", "míos", "mías", "tuyo", "tuya", "tuyos",
+                 "tuyas", "suyo", "suya", "suyos", "suyas", "todo"}
+
+POSSESSIVE_PRON_UNSTRESSED = {"nuestro", "nuestra", "nuestros", "nuestras",
+                              "vuestro", "vuestra", "vuestros", "vuestras"}
+
+"""
+Regular expressions and rules for syllabification exceptions
+"""
+
+# Words starting with prefixes SIN-/DES- followed by consonant "destituir"
+PREFIX_DES_WITH_CONSONANT_RE = (
+    re.compile("^(des)([bcdfgjklmhnñpqrstvxyz].*)", re.I | re.U))
+
+# Words starting with prefixes SIN-/DES- followed by consonant "sinhueso"
+PREFIX_SIN_WITH_CONSONANT_RE = (
+    re.compile("^(sin)([bcdfgjklmhnñpqrstvxyz].*)", re.I | re.U))
+
+# Group consonant+[hlr] with exceptions for ll
+CONSONANT_GROUP = (re.compile("(.*[hmnqsw])([hlr][aeiouáéíóú].*)", re.I | re.U))
+CONSONANT_GROUP_EXCEPTION_LL = (
+    re.compile("(.*[hlmnqsw])([hr][aeiouáéíóú].*)", re.I | re.U))
+CONSONANT_GROUP_EXCEPTION_DL = (
+    re.compile("(.*[d])([l][aeiouáéíóú].*)", re.I | re.U))
+
+# Group vowel+ w + vowel
+W_VOWEL_GROUP = (re.compile("(.*[aeiouáéíóú])(w[aeiouáéíóú].*)", re.I | re.U))
+
+# Post-syllabification exceptions for consonant clusters and diphthongs
+# Explicitit hiatus on first vowel
+HIATUS_FIRST_VOWEL_RE = (re.compile(
+    "(?:(.*-)|^)([äëïö]|[^g]ü)([aeiouúáéíó].*)",
+    re.I | re.U | re.VERBOSE))
+
+# Consonant cluster. Example: 'cneorácea'
+CONSONANT_CLUSTER_RE = (re.compile(
+    "(?:(.*-)|^)([mpgc])-([bcdfghjklmñnpqrstvwxyz][aeioáéíó].*)",
+    re.I | re.U | re.VERBOSE))
+
+# Lowering diphthong. Example: 'ahijador'
+LOWERING_DIPHTHONGS_WITH_H = (
+    re.compile(
+        """((?:.*-|^)(?:qu|[bcdfghjklmñnpqrstvwxyz]+)?)
+        ([aeo])-(h[iu](?![aeoiuíúáéó]).*)""",
+        re.I | re.U | re.VERBOSE))
+
+# Lowering diphthong. Example: 'buhitiho'
+RAISING_DIPHTHONGS_WITH_H = (
+    re.compile(
+        """((?:.*-|^)(?:qu|[bcdfghjklmñnpqrstvwxyz]+)?)
+        ([iu])-(h[aeiouáéó](?![aeoáéiuíú]).*)""",
+        re.I | re.U | re.VERBOSE))
+
 """
 Exceptions for foreign words in Spanish that do not follow
 standard Spanish syllabification rules
@@ -985,6 +1105,7 @@ ALTERNATIVE_SYLLABIFICATION = {
     'hiatos': (['hia', 'tos'], [(['hi', 'a', 'tos'], (0, 1))]),
     'homosexual': (['ho', 'mo', 'se', 'xual'],
                    [(['ho', 'mo', 'se', 'xu', 'al'], (3, 4))]),
+    'ilión': (['i', 'lión'], [(['i', 'li', 'ón'], (0, 1))]),
     'inactual': (['i', 'nac', 'tual'], [(['i', 'nac', 'tu', 'al'], (2, 3))]),
     'incestuoso': (['in', 'ces', 'tuo', 'so'],
                    [(['in', 'ces', 'tu', 'o', 'so'], (2, 3))]),
@@ -1207,6 +1328,10 @@ ALTERNATIVE_SYLLABIFICATION = {
     'sexuados': (['se', 'xua', 'dos'], [(['se', 'xu', 'a', 'dos'], (1, 2))]),
     'sexual': (['se', 'xual'], [(['se', 'xu', 'al'], (1, 2))]),
     'suave': (['sua', 've'], [(['su', 'a', 've'], (0, 1))]),
+    'suntuoso': (['sun', 'tuo', 'so'], [(['sun', 'tu', 'o', 'so'], (2, 3))]),
+    'suntuosa': (['sun', 'tuo', 'sa'], [(['sun', 'tu', 'o', 'sa'], (2, 3))]),
+    'suntuosos': (['sun', 'tuo', 'sos'], [(['sun', 'tu', 'o', 'sos'], (2, 3))]),
+    'suntuosas': (['sun', 'tuo', 'sas'], [(['sun', 'tu', 'o', 'sas'], (2, 3))]),
     'televisual': (['te', 'le', 'vi', 'sual'],
                    [(['te', 'le', 'vi', 'su', 'al'], (3, 4))]),
     'textual': (['tex', 'tual'], [(['tex', 'tu', 'al'], (1, 2))]),
@@ -1331,7 +1456,11 @@ ALTERNATIVE_SYLLABIFICATION = {
     'viajares': (['via', 'ja', 'res'], [(['vi', 'a', 'ja', 'res'], (0, 1))]),
     'viaje': (['via', 'je'], [(['vi', 'a', 'je'], (0, 1))]),
     'viajes': (['via', 'jes'], [(['vi', 'a', 'jes'], (0, 1))]),
-    'virtual': (['vir', 'tual'], [(['vir', 'tu', 'al'], (2, 2))]),
+    'virtual': (['vir', 'tual'], [(['vir', 'tu', 'al'], (2, 3))]),
+    'virtuoso': (['vir', 'tuo', 'so'], [(['vir', 'tu', 'o', 'so'], (2, 3))]),
+    'virtuosa': (['vir', 'tuo', 'sa'], [(['vir', 'tu', 'o', 'sa'], (2, 3))]),
+    'virtuosos': (['vir', 'tuo', 'sos'], [(['vir', 'tu', 'o', 'sos'], (2, 3))]),
+    'virtuosas': (['vir', 'tuo', 'sas'], [(['vir', 'tu', 'o', 'sas'], (2, 3))]),
     'visual': (['vi', 'sual'], [(['vi', 'su', 'al'], (1, 2))]),
     'visuales': (['vi', 'sua', 'les'], [(['vi', 'su', 'a', 'les'], (1, 2))]),
     'viudo': (['viu', 'do'], [(['vi', 'u', 'do'], (0, 1))]),
